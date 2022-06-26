@@ -32,9 +32,9 @@ def merge_categorical_values(df, feature, min_count):
 
 
 def preprocess_dataset(dataset, features_all, features_oneHotEncode, features_standardize, 
-                       target_label, drop_oneHotEncoder='first',
-                       drop_train_duplicates=False, split_by_date=False, train_size=0.6, val_size=0.2, 
-                       test_size=0.2, random_seed=42):   
+                       target_label, drop_oneHotEncoder='if_binary',
+                       val_size=0.2, test_size=0.2, stratify_by_y=False,
+                       random_seed=42):   
     '''
 
     Parameters
@@ -51,12 +51,6 @@ def preprocess_dataset(dataset, features_all, features_oneHotEncode, features_st
         drop type of one hot encoder: {'first', 'if_binary', None}
     target_label : string
         target column name
-    drop_train_duplicates : bool
-        whenever to drop train duplicates
-    split_by_date : bool
-        perform the train/val/split based on data_firma_plico_a
-    train_size: float
-        train_size (only for split_by_date=False), e.g. 0.6
     val_size: float
         val_size (only for split_by_date=False), e.g. 0.2
     test_size : float
@@ -80,35 +74,49 @@ def preprocess_dataset(dataset, features_all, features_oneHotEncode, features_st
         sklearn.preprocessing objects used for the features preprocessing
     features_preprocessed : list
         list of encoded output features
+        
+    Examples
+    --------
+    >>> from sklearn import datasets
+    >>> import pandas as pd
+    >>> from utils import preprocess_dataset
+    
+    >>> boston = datasets.load_boston()
+    
+    >>> df = pd.DataFrame([
+        ['green', 'XL', 7.2, 'class1'],
+        ['blue', 'L', 2.1, 'class2'], 
+        ['red', 'S', 9.2, 'class3'],
+        ['blue', 'L', 6.2, 'class2'], 
+        ['red', 'L', 6.2, 'class3'], 
+        ['green', 'L', 6.2, 'class2'], 
+        ['green', 'L', 6.2, 'class1']])
+    
+    >>> df.columns = ['color', 'size', 'price', 'classlabel']
+    
+    >>> ordinal_encoding_map = {
+        'XL': 3,
+        'L': 2,
+        'M': 1,
+        'S': 0}
+    
+    >>> df['size'] = df['size'].map(ordinal_encoding_map)
+    
+    >>> preprocessed_data = preprocess_dataset(dataset=df,
+                       features_all=['color', 'size', 'price'],
+                       features_oneHotEncode=['color'],
+                       features_standardize=['size', 'price'],
+                       target_label='classlabel')
+
     '''
     
-    def drop_train_duplicates_func(X_train, y_train):
-        df_train = pd.concat([X_train, y_train], axis=1)
-        df_train = df_train.drop_duplicates()
-        X_train = df_train.drop(target_label, axis=1)
-        y_train = df_train[target_label]
-        return X_train, y_train
     
     features_untouch = [feature for feature in features_all if (feature not in features_oneHotEncode) and (feature not in features_standardize)]
 
-    if split_by_date:
-        dataset['data_firma_plico_a'] = dataset['data_firma_plico_a'].astype('datetime64[ns]')
-        max_year = dataset['data_firma_plico_a'].max().year
-        max_month = dataset['data_firma_plico_a'].max().month
-        validation_date = datetime.datetime(max_year, max_month-1, 1)
-        test_date = datetime.datetime(max_year, max_month, 1)
-        dataset_train = dataset[dataset['data_firma_plico_a']<validation_date]
-        dataset_val = dataset[(dataset['data_firma_plico_a']>=validation_date) & (dataset['data_firma_plico_a']<test_date)]
-        dataset_test = dataset[dataset['data_firma_plico_a']>=test_date]
-        X_train, X_val, X_test = dataset_train[features_all], dataset_val[features_all], dataset_test[features_all]
-        y_train, y_val, y_test = dataset_train[target_label], dataset_val[target_label], dataset_test[target_label]
-    else:
-        X = dataset[features_all]
-        y = dataset[target_label]
-        X_train, X_val_test, y_train, y_val_test = train_test_split(X, y, test_size=val_size+test_size, random_state=random_seed, stratify=y)
-        X_val, X_test, y_val, y_test = train_test_split(X_val_test, y_val_test, test_size=test_size/(val_size+test_size), random_state=random_seed, stratify=y_val_test)
-
-    if drop_train_duplicates:   X_train, y_train = drop_train_duplicates_func(X_train, y_train)
+    X = dataset[features_all]
+    y = dataset[target_label]
+    X_train, X_val_test, y_train, y_val_test = train_test_split(X, y, test_size=val_size+test_size, random_state=random_seed, stratify=y if stratify_by_y else None)
+    X_val, X_test, y_val, y_test = train_test_split(X_val_test, y_val_test, test_size=test_size/(val_size+test_size), random_state=random_seed, stratify=y_val_test if stratify_by_y else None)
 
     idxs_train = X_train.index
     idxs_val = X_val.index
@@ -137,10 +145,22 @@ def preprocess_dataset(dataset, features_all, features_oneHotEncode, features_st
         X_val_preprocessed = np.concatenate((X_val_preprocessed, X_val_oneHotEncoded), axis=1)
         X_test_preprocessed = np.concatenate((X_test_preprocessed, X_test_oneHotEncoded), axis=1)
         
+        values_todrop = []
+        try:
+            drop_idx_isnull = not enc.drop_idx_
+        except ValueError:
+            drop_idx_isnull = False
+        for idx_feature in range(len(features_oneHotEncode)):
+            if drop_idx_isnull or (enc.drop_idx_[idx_feature]==None):
+                values_todrop.append(None)
+            else:
+                values_todrop.append(enc.drop_idx_[idx_feature])
+        
         features_oneHotEncoded = []
-        for idx, feature in enumerate(features_oneHotEncode):
-            for value in enc.categories_[idx][1:]:
-                features_oneHotEncoded.append(feature + '_' + str(value))
+        for idx_feature, feature in enumerate(features_oneHotEncode):
+            for idx_value, value in enumerate(enc.categories_[idx_feature]):
+                if (values_todrop[idx_feature]==None) or (idx_value!=values_todrop[idx_feature]):
+                    features_oneHotEncoded.append(feature + '_' + str(value))
         features_preprocessed += features_oneHotEncoded
         
     # Standardization
