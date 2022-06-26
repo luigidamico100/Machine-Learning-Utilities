@@ -265,11 +265,29 @@ def preprocess_test_dataset(dataset_test, features_all, features_oneHotEncode, f
     
     
 class Filter:
+    '''
+    A class used to filter your dataset.
+    
+    Examples
+    --------
+    >>> from sklearn import datasets
+    >>> rom pandas import pd
+    
+    >>> iris = datasets.load_iris()
+    >>> df = pd.DataFrame(data=iris['data'], columns=iris['feature_names'])
+    >>> df['class_label'] = iris['target']
+    
+    >>> df_filtered = Filter.filter_by_minmax(df, field='sepal length (cm)', minmax_values=(5., 6.), verbose=True)
+    
+    Removed 83 out of 150 rows (55.33% removed)
+
+    
+    '''
     
     def verbose_filtering(func):
-        def inner(dataset, field, value, verbose=False):
+        def inner(dataset, verbose=False, **kwargs):
             old_len = len(dataset)
-            dataset = func(dataset, field, value)
+            dataset = func(dataset, **kwargs)
             new_len = len(dataset)
             if verbose:
                 print(f'Removed {old_len - new_len} out of {old_len} rows ({((old_len - new_len) / old_len)*100:.2f}% removed)')
