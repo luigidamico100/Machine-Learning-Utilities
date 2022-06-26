@@ -264,86 +264,54 @@ def preprocess_test_dataset(dataset_test, features_all, features_oneHotEncode, f
     return X_test_preprocessed, idxs_test
     
     
+class Filter:
+    
+    def verbose_filtering(func):
+        def inner(dataset, field, value, verbose=False):
+            old_len = len(dataset)
+            dataset = func(dataset, field, value)
+            new_len = len(dataset)
+            if verbose:
+                print(f'Removed {old_len - new_len} out of {old_len} rows ({((old_len - new_len) / old_len)*100:.2f}% removed)')
+            return dataset
+        return inner
+    
+    @verbose_filtering
+    def filter_by_value(dataset, field, value):
+        return dataset[dataset[field]==value]
+    
+    @verbose_filtering
+    def filter_by_value_major_then(dataset, field, threshold):
+        return dataset[dataset[field]>=threshold]
+
+    @verbose_filtering
+    def filter_by_value_minor_then(dataset, field, threshold):
+        return dataset[dataset[field]<=threshold]
+    
+    @verbose_filtering
+    def filter_by_outlier(dataset, field, quantile_coeff):
+        series = dataset[field]
+        lower_limit = series.quantile(quantile_coeff)
+        upper_limit = series.quantile(1. - quantile_coeff)
+        
+        dataset_out = dataset[(series>=lower_limit) & (series <= upper_limit)]
+        
+        return dataset_out
+    
+    @verbose_filtering
+    def filter_by_minmax(dataset, field, minmax_values):
+        series = dataset[field]
+        lower_limit = minmax_values[0]
+        upper_limit = minmax_values[1]
+        
+        dataset_out = dataset[(series>=lower_limit) & (series <= upper_limit)]
+        
+        return dataset_out
+
     
     
 
 
-def preprocess_dataset_correct_sparsematrix(dataset, features_all, features_oneHotEncode, features_standardize, target_label, test_size=0.2, random_seed=42):   
-
-    features_untouch = [feature for feature in features_all if (feature not in features_oneHotEncode) and (feature not in features_standardize)]
 
 
-    X = dataset[features_all]
-    y = dataset[target_label]
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=random_seed, stratify=y)
 
-
-    idxs_train = X_train.index
-    idxs_test = X_test.index
-    
-    X_train_preprocessed = np.zeros((X_train.shape[0], 0))
-    X_test_preprocessed = np.zeros((X_test.shape[0], 0))
-    
-    features_preprocessed = []
-    scaler = StandardScaler()
-    enc = OneHotEncoder()
-    
-    # OneHotEncoding
-    if features_oneHotEncode:
-        
-        X_train_oneHotEncode = X_train[features_oneHotEncode]
-        X_test_oneHotEncode = X_test[features_oneHotEncode]
-        
-        X_train_oneHotEncoded = enc.fit_transform(X_train_oneHotEncode)
-        X_test_oneHotEncoded = enc.transform(X_test_oneHotEncode)
-        
-        X_train_preprocessed = np.concatenate((X_train_preprocessed, X_train_oneHotEncoded.todense()), axis=1)
-        X_test_preprocessed = np.concatenate((X_test_preprocessed, X_test_oneHotEncoded.todense()), axis=1)
-        
-        features_oneHotEncoded = []
-        for idx, feature in enumerate(features_oneHotEncode):
-            for value in enc.categories_[idx][1:]:
-                features_oneHotEncoded.append(feature + "_" + str(value))
-        features_preprocessed += features_oneHotEncoded
-        
-    # Standardization
-    if features_standardize:
-        
-        X_train_standardize = X_train[features_standardize]
-        X_test_standardize = X_test[features_standardize]
-        
-        scaler = StandardScaler()
-        X_train_standardized = scaler.fit_transform(X_train_standardize)
-        X_test_standardized = scaler.transform(X_test_standardize)
-        
-        X_train_preprocessed = np.concatenate((X_train_preprocessed, X_train_standardized), axis=1)
-        X_test_preprocessed = np.concatenate((X_test_preprocessed, X_test_standardized), axis=1)
-        
-        n_scaler = X_train_standardized.shape[1]
-        features_standardized = [feature+"_std" for feature in features_standardize]
-        features_preprocessed += features_standardized
-        
-    # Untouched features
-    if features_untouch:
-        
-        X_train_untouched = X_train[features_untouch]
-        X_test_untouched = X_test[features_untouch]
-        
-        X_train_preprocessed = np.concatenate((X_train_preprocessed, X_train_untouched), axis=1)
-        X_test_preprocessed = np.concatenate((X_test_preprocessed, X_test_untouched), axis=1)
-        
-        features_preprocessed += features_untouch
-        
-    # Target label encoding
-    le = LabelEncoder()
-    y_train_encoded = le.fit_transform(y_train)
-    y_test_encoded = le.transform(y_test)
-    
-    # preprocessed dataset creation
-    X_train_preprocessed = X_train_preprocessed.astype("float")
-    X_test_preprocessed = X_test_preprocessed.astype("float")
-    
-    n_features = X_train_preprocessed.shape[1]
-    n_output = len(np.unique(y_train_encoded))
-    
-    return (X_train_preprocessed, y_train_encoded), (X_test_preprocessed, y_test_encoded), (n_features, n_output), features_preprocessed
