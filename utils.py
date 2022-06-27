@@ -31,12 +31,11 @@ def merge_categorical_values(df, feature, min_count):
 
 
 
-def preprocess_dataset(dataset, features_all, features_oneHotEncode, features_standardize, 
+def preprocess_dataset(dataset, features_all, features_oneHotEncode, features_ordinalEncode, features_standardize, 
                        target_label, drop_oneHotEncoder='if_binary',
-                       val_size=0.2, test_size=0.2, stratify_by_y=False,
+                       val_size=0.2, test_size=0.2, stratify_by_y=False, encode_y=True,
                        random_seed=42):   
     '''
-
     Parameters
     ----------
     dataset : pandas.DataFrame
@@ -45,6 +44,8 @@ def preprocess_dataset(dataset, features_all, features_oneHotEncode, features_st
         lista di feature da considerare, e.g. features_all = ['COMMODITY', 'Anno_Nascita', 'popresidente', 'tipocomune', 'firma_day']
     features_oneHotEncode : list
         lista di feature sui cui eseguire il one-hot-encoding, e.g. features_oneHotEncode = ['COMMODITY', 'tipocomune']
+    features_ordinalEncode : list
+        ...
     features_standardize : list
         lista di feature sui cui eseguire la standardizzazione, e.g. features_standardize = ['Anno_Nascita', 'firma_day']
     drop_oneHotEncoder : string
@@ -107,11 +108,10 @@ def preprocess_dataset(dataset, features_all, features_oneHotEncode, features_st
                        features_oneHotEncode=['color'],
                        features_standardize=['size', 'price'],
                        target_label='classlabel')
-
     '''
     
-    
-    features_untouch = [feature for feature in features_all if (feature not in features_oneHotEncode) and (feature not in features_standardize)]
+    features_to_preprocess = features_oneHotEncode + features_ordinalEncode + features_standardize
+    features_untouch = [feature for feature in features_all if (feature not in features_to_preprocess)]
 
     X = dataset[features_all]
     y = dataset[target_label]
@@ -128,7 +128,8 @@ def preprocess_dataset(dataset, features_all, features_oneHotEncode, features_st
     
     features_preprocessed = []
     scaler = StandardScaler()
-    enc = OneHotEncoder(sparse=False, drop=drop_oneHotEncoder)
+    enc_onehot = OneHotEncoder(sparse=False, drop=drop_oneHotEncoder)
+    enc_ordinal = OrdinalEncoder()
     
     # OneHotEncoding
     if features_oneHotEncode:
@@ -137,9 +138,9 @@ def preprocess_dataset(dataset, features_all, features_oneHotEncode, features_st
         X_val_oneHotEncode = X_val[features_oneHotEncode]
         X_test_oneHotEncode = X_test[features_oneHotEncode]
         
-        X_train_oneHotEncoded = enc.fit_transform(X_train_oneHotEncode)
-        X_val_oneHotEncoded = enc.transform(X_val_oneHotEncode)
-        X_test_oneHotEncoded = enc.transform(X_test_oneHotEncode)
+        X_train_oneHotEncoded = enc_onehot.fit_transform(X_train_oneHotEncode)
+        X_val_oneHotEncoded = enc_onehot.transform(X_val_oneHotEncode)
+        X_test_oneHotEncoded = enc_onehot.transform(X_test_oneHotEncode)
         
         X_train_preprocessed = np.concatenate((X_train_preprocessed, X_train_oneHotEncoded), axis=1)
         X_val_preprocessed = np.concatenate((X_val_preprocessed, X_val_oneHotEncoded), axis=1)
@@ -147,22 +148,39 @@ def preprocess_dataset(dataset, features_all, features_oneHotEncode, features_st
         
         values_todrop = []
         try:
-            drop_idx_isnull = not enc.drop_idx_
+            drop_idx_isnull = not enc_onehot.drop_idx_
         except ValueError:
             drop_idx_isnull = False
         for idx_feature in range(len(features_oneHotEncode)):
-            if drop_idx_isnull or (enc.drop_idx_[idx_feature]==None):
+            if drop_idx_isnull or (enc_onehot.drop_idx_[idx_feature]==None):
                 values_todrop.append(None)
             else:
-                values_todrop.append(enc.drop_idx_[idx_feature])
+                values_todrop.append(enc_onehot.drop_idx_[idx_feature])
         
         features_oneHotEncoded = []
         for idx_feature, feature in enumerate(features_oneHotEncode):
-            for idx_value, value in enumerate(enc.categories_[idx_feature]):
+            for idx_value, value in enumerate(enc_onehot.categories_[idx_feature]):
                 if (values_todrop[idx_feature]==None) or (idx_value!=values_todrop[idx_feature]):
                     features_oneHotEncoded.append(feature + '_' + str(value))
         features_preprocessed += features_oneHotEncoded
         
+    # OrdinalEncoding
+    if features_ordinalEncode:
+        X_train_ordinalEncode = X_train[features_ordinalEncode]
+        X_val_ordinalEncode = X_val[features_ordinalEncode]
+        X_test_ordinalEncode = X_test[features_ordinalEncode]
+        
+        X_train_ordinalEncoded = enc_ordinal.fit_transform(X_train_ordinalEncode)
+        X_val_ordinalEncoded = enc_ordinal.transform(X_val_ordinalEncode)
+        X_test_ordinalEncoded = enc_ordinal.transform(X_test_ordinalEncode)
+        
+        X_train_preprocessed = np.concatenate((X_train_preprocessed, X_train_ordinalEncoded), axis=1)
+        X_val_preprocessed = np.concatenate((X_val_preprocessed, X_val_ordinalEncoded), axis=1)
+        X_test_preprocessed = np.concatenate((X_test_preprocessed, X_test_ordinalEncoded), axis=1)
+
+        features_ordinalEncoded = [feature+'_ordenc' for feature in features_ordinalEncode]
+        features_preprocessed += features_ordinalEncoded
+    
     # Standardization
     if features_standardize:
         
@@ -185,11 +203,10 @@ def preprocess_dataset(dataset, features_all, features_oneHotEncode, features_st
         
     # Untouched features
     if features_untouch:
-        
         X_train_untouched = X_train[features_untouch]
         X_val_untouched = X_val[features_untouch]
         X_test_untouched = X_test[features_untouch]
-        
+
         X_train_preprocessed = np.concatenate((X_train_preprocessed, X_train_untouched), axis=1)
         X_val_preprocessed = np.concatenate((X_val_preprocessed, X_val_untouched), axis=1)
         X_test_preprocessed = np.concatenate((X_test_preprocessed, X_test_untouched), axis=1)
@@ -198,9 +215,10 @@ def preprocess_dataset(dataset, features_all, features_oneHotEncode, features_st
         
     # Target label encoding
     le = LabelEncoder()
-    y_train_encoded = le.fit_transform(y_train)
-    y_val_encoded = le.transform(y_val)
-    y_test_encoded = le.transform(y_test)
+    if encode_y:
+        y_train = le.fit_transform(y_train)
+        y_val = le.transform(y_val)
+        y_test = le.transform(y_test)
     
     # preprocessed dataset creation
     X_train_preprocessed = X_train_preprocessed.astype('float')
@@ -208,10 +226,11 @@ def preprocess_dataset(dataset, features_all, features_oneHotEncode, features_st
     X_test_preprocessed = X_test_preprocessed.astype('float')
     
     n_features = X_train_preprocessed.shape[1]
-    n_output = len(np.unique(y_train_encoded))
     
-    return (X_train_preprocessed, y_train_encoded), (X_val_preprocessed, y_val_encoded), \
-        (X_test_preprocessed, y_test_encoded), (n_features, n_output), (idxs_train, idxs_val, idxs_test), (enc, scaler, le), features_preprocessed
+    return (X_train_preprocessed, y_train), (X_val_preprocessed, y_val), \
+        (X_test_preprocessed, y_test), (n_features), (idxs_train, idxs_val, idxs_test), \
+            (enc_onehot, enc_ordinal, scaler, le), features_preprocessed
+
 
 
 def preprocess_test_dataset(dataset_test, features_all, features_oneHotEncode, features_standardize, enc, scaler):
