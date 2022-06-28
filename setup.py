@@ -1,0 +1,1 @@
+from setuptools import setup, find_packagesfrom ml_utils import __version__setup(    name='machinelearning_utils_pkg',    version=__version__,    url='https://github.com/MichaelKim0407/tutorial-pip-package',    author="Luigi D'Amico",    description='A short description of the project',    author_email='luigidamico.1010@gmail.com',    packages=find_packages(),)
