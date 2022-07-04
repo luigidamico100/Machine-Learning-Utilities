@@ -27,7 +27,7 @@ def merge_categorical_values(df, feature, min_count):
             
     df[feature+"_merged"] = df.apply(apply_fun, axis=1)
     
-    return df[feature+"_merged"]
+    return df
 
 
 
