@@ -344,6 +344,10 @@ class Filter:
         dataset_out = dataset[(series>=lower_limit) & (series <= upper_limit)]
         
         return dataset_out
+        
+    @verbose_filtering
+    def filter_by_in_list(dataset, field, list_):
+        return dataset[dataset[field].isin(list_)]
 
     
     
