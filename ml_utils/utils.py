@@ -14,6 +14,7 @@ import datetime
 
 
 def merge_categorical_values(df, feature, min_count):
+    
     def merge_fun(df_row, feature, values_to_merge):
         if df_row[feature] in values_to_merge:
             return "Other"
@@ -21,13 +22,14 @@ def merge_categorical_values(df, feature, min_count):
             return df_row[feature]
         
     values_to_merge = df[feature].value_counts()[df[feature].value_counts()<min_count].index.to_list()
-    
-    def apply_fun(df_row):
-        return merge_fun(df_row, feature, values_to_merge)
+    values_unique = list(df[feature].unique())
             
-    df[feature+"_merged"] = df.apply(apply_fun, axis=1)
+    df[feature+"_merged"] = df.apply(merge_fun, axis=1, feature=feature, values_to_merge=values_to_merge)
     
-    return df
+    feature_map = {value: value for value in values_unique if value not in values_to_merge}
+    for value in values_to_merge:
+        feature_map[value] = "Other"
+    return df, feature_map
 
 
 
