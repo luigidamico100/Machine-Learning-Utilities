@@ -124,6 +124,7 @@ def preprocess_dataset(dataset, features_all, features_oneHotEncode, features_or
     idxs_val = X_val.index
     idxs_test = X_test.index
     
+    
     X_train_preprocessed = np.zeros((X_train.shape[0], 0))
     X_val_preprocessed = np.zeros((X_val.shape[0], 0))
     X_test_preprocessed = np.zeros((X_test.shape[0], 0))
@@ -166,6 +167,9 @@ def preprocess_dataset(dataset, features_all, features_oneHotEncode, features_or
                     features_oneHotEncoded.append(feature + '_' + str(value))
         features_preprocessed += features_oneHotEncoded
         
+    else:
+        features_oneHotEncoded = []
+        
     # OrdinalEncoding
     if features_ordinalEncode:
         X_train_ordinalEncode = X_train[features_ordinalEncode]
@@ -173,15 +177,24 @@ def preprocess_dataset(dataset, features_all, features_oneHotEncode, features_or
         X_test_ordinalEncode = X_test[features_ordinalEncode]
         
         X_train_ordinalEncoded = enc_ordinal.fit_transform(X_train_ordinalEncode)
-        X_val_ordinalEncoded = enc_ordinal.transform(X_val_ordinalEncode)
-        X_test_ordinalEncoded = enc_ordinal.transform(X_test_ordinalEncode)
-        
+        try:
+            X_val_ordinalEncoded = enc_ordinal.transform(X_val_ordinalEncode)
+            X_test_ordinalEncoded = enc_ordinal.transform(X_test_ordinalEncode)
+        except ValueError as err:
+            print(err)
+            enc_ordinal = OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1)
+            X_val_ordinalEncoded = enc_ordinal.transform(X_val_ordinalEncode)
+            X_test_ordinalEncoded = enc_ordinal.transform(X_test_ordinalEncode)
+            
         X_train_preprocessed = np.concatenate((X_train_preprocessed, X_train_ordinalEncoded), axis=1)
         X_val_preprocessed = np.concatenate((X_val_preprocessed, X_val_ordinalEncoded), axis=1)
         X_test_preprocessed = np.concatenate((X_test_preprocessed, X_test_ordinalEncoded), axis=1)
 
         features_ordinalEncoded = [feature+'_ordenc' for feature in features_ordinalEncode]
         features_preprocessed += features_ordinalEncoded
+        
+    else:
+        features_ordinalEncoded = []
     
     # Standardization
     if features_standardize:
@@ -203,6 +216,10 @@ def preprocess_dataset(dataset, features_all, features_oneHotEncode, features_or
         features_standardized = [feature+'_std' for feature in features_standardize]
         features_preprocessed += features_standardized
         
+    else:
+        features_standardized = []
+        
+        
     # Untouched features
     if features_untouch:
         X_train_untouched = X_train[features_untouch]
@@ -215,6 +232,9 @@ def preprocess_dataset(dataset, features_all, features_oneHotEncode, features_or
         
         features_preprocessed += features_untouch
         
+    else:
+        features_untouch = []
+        
     # Target label encoding
     le = LabelEncoder()
     if encode_y:
@@ -226,13 +246,15 @@ def preprocess_dataset(dataset, features_all, features_oneHotEncode, features_or
     X_train_preprocessed = X_train_preprocessed.astype('float')
     X_val_preprocessed = X_val_preprocessed.astype('float')
     X_test_preprocessed = X_test_preprocessed.astype('float')
+    y_train = np.array(y_train)
+    y_val = np.array(y_val)
+    y_test = np.array(y_test)
     
     n_features = X_train_preprocessed.shape[1]
     
     return (X_train_preprocessed, y_train), (X_val_preprocessed, y_val), \
         (X_test_preprocessed, y_test), (n_features), (idxs_train, idxs_val, idxs_test), \
-            (enc_onehot, enc_ordinal, scaler, le), features_preprocessed
-
+            (enc_onehot, enc_ordinal, scaler, le), (features_preprocessed, features_oneHotEncoded, features_ordinalEncoded, features_standardized, features_untouch)
 
 
 def preprocess_test_dataset(dataset_test, features_all, features_oneHotEncode, features_standardize, enc, scaler):
