@@ -7,13 +7,11 @@ Created on Fri Jun 24 14:45:27 2022
 """
 
 import numpy as np
-import pandas as pd
 from sklearn.preprocessing import OneHotEncoder, StandardScaler, LabelEncoder, OrdinalEncoder
 from sklearn.model_selection import train_test_split
-import datetime
 
 
-def merge_categorical_values(df, feature, min_count):
+def merge_categorical_values(df, feature, min_count, suffix='_merged'):
     
     def merge_fun(df_row, feature, values_to_merge):
         if df_row[feature] in values_to_merge:
@@ -24,7 +22,7 @@ def merge_categorical_values(df, feature, min_count):
     values_to_merge = df[feature].value_counts()[df[feature].value_counts()<min_count].index.to_list()
     values_unique = list(df[feature].unique())
             
-    df[feature+"_merged"] = df.apply(merge_fun, axis=1, feature=feature, values_to_merge=values_to_merge)
+    df[feature+suffix] = df.apply(merge_fun, axis=1, feature=feature, values_to_merge=values_to_merge)
     
     feature_map = {value: value for value in values_unique if value not in values_to_merge}
     for value in values_to_merge:
@@ -305,8 +303,8 @@ def preprocess_test_dataset(dataset_test, features_all, features_oneHotEncode, f
     X_test_preprocessed = X_test_preprocessed.astype('float')
     
     return X_test_preprocessed, idxs_test
-    
-    
+
+
 class Filter:
     '''
     A class used to filter your dataset.
@@ -323,7 +321,6 @@ class Filter:
     >>> df_filtered = Filter.filter_by_minmax(df, field='sepal length (cm)', minmax_values=(5., 6.), verbose=True)
     
     Removed 83 out of 150 rows (55.33% removed)
-
     
     '''
     
@@ -342,11 +339,19 @@ class Filter:
         return dataset[dataset[field]==value]
     
     @verbose_filtering
-    def filter_by_value_major_then(dataset, field, threshold):
+    def filter_by_value_different_from(dataset, field, value):
+        return dataset[dataset[field]!=value]
+    
+    @verbose_filtering
+    def filter_by_value_major_then(dataset, field, threshold, strictly=False):
+        if strictly:
+            return dataset[dataset[field]>threshold]
         return dataset[dataset[field]>=threshold]
 
     @verbose_filtering
-    def filter_by_value_minor_then(dataset, field, threshold):
+    def filter_by_value_minor_then(dataset, field, threshold, strictly=False):
+        if strictly:
+            return dataset[dataset[field]<threshold]
         return dataset[dataset[field]<=threshold]
     
     @verbose_filtering
@@ -368,12 +373,15 @@ class Filter:
         dataset_out = dataset[(series>=lower_limit) & (series <= upper_limit)]
         
         return dataset_out
-        
+    
     @verbose_filtering
     def filter_by_in_list(dataset, field, list_):
         return dataset[dataset[field].isin(list_)]
-
     
+    @verbose_filtering
+    def filter_by_notna(dataset, subset):
+        return dataset.dropna(axis=0, subset=subset)
+
     
 
 
